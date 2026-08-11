@@ -8,3 +8,7 @@ export XDG_STATE_HOME="$HOME/.local/state"
 # Zsh Custom Directory
 # Moves Zsh configuration files
 export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
+
+# zsh cache
+export ZSH_COMPDUMP="$XDG_CACHE_HOME/zsh/zcompdump-${HOST}-${ZSH_VERSION}"
+
