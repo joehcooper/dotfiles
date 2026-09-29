@@ -5,3 +5,5 @@ export XDG_CACHE_HOME="$HOME/.cache"
 export XDG_DATA_HOME="$HOME/.local/share"
 export XDG_STATE_HOME="$HOME/.local/state"
 
+# Redirect Zsh to look for .zshrc, .zprofile, etc., inside the XDG config directory
+export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
