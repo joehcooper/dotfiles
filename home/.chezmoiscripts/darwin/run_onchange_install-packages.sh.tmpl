@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -eufo pipefail
+
+echo "Installing Homebrew packages for {{ .host }}..."
+
+brew bundle --file=/dev/stdin <<EOF
+
+# --- all macs ---
+
+# --- joehcooper-main ---
+{{ if eq .host "joehcooper-main" }}
+
+# --- joehcooper-roam ---
+{{ else if eq .host "joehcooper-roam" }}
+
+{{ end }}
+EOF
