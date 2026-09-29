@@ -1,0 +1,6 @@
+{{- $host := .chezmoi.hostname | lower | trimSuffix ".local" -}}
+
+[data]
+  host      = {{ $host | quote }}
+  ephemeral = false # true if this machine is ephemeral (cloud/VM)
+  headless  = false # true if this machine has no screen/keyboard
