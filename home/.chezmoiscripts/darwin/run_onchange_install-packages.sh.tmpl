@@ -7,6 +7,7 @@ echo "Installing Homebrew packages for {{ .host }}..."
 brew bundle --file=/dev/stdin <<EOF
 
 # --- all macs ---
+brew "neovim"
 
 # --- joehcooper-main ---
 {{ if eq .host "joehcooper-main" }}
