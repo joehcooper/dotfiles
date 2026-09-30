@@ -1,6 +1,15 @@
 {{- $host := .chezmoi.hostname | lower | trimSuffix ".local" -}}
+{{- $isDarwin := eq .chezmoi.os "darwin" -}}
+
+{{- $sshSignProgram := "" -}}
+{{- if $isDarwin -}}
+{{-   $sshSignProgram = "/Applications/1Password.app/Contents/MacOS/op-ssh-sign" -}}
+{{- end -}}
 
 [data]
-  host      = {{ $host | quote }}
-  ephemeral = false # true if this machine is ephemeral (cloud/VM)
-  headless  = false # true if this machine has no screen/keyboard
+  host           = {{ $host | quote }}
+  ephemeral      = false # true if this machine is ephemeral (cloud/VM)
+  headless       = false # true if this machine has no screen/keyboard
+  email          = "joe@joehcooper.com"
+  isDarwin       = {{ $isDarwin }}
+  sshSignProgram = {{ $sshSignProgram | quote }}
