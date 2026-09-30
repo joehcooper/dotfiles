@@ -1,6 +1,12 @@
 export ZSH="$XDG_DATA_HOME/oh-my-zsh"
 export ZSH_CACHE_DIR="$XDG_CACHE_HOME/oh-my-zsh"
 
+# Move OMZ custom folder
+ZSH_CUSTOM="$XDG_CONFIG_HOME/zsh/custom"
+
+# Relocate the Zsh history file to the XDG state folder
+HISTFILE="$XDG_STATE_HOME/zsh/history"
+
 ZSH_THEME="robbyrussell"
 
 plugins=(git)
