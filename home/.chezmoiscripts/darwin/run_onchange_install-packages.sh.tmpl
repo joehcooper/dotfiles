@@ -4,6 +4,11 @@ set -eufo pipefail
 
 echo "Installing Homebrew packages for {{ .host }}..."
 
+{{ if eq .host "joehcooper-main" }}
+brew tap ddev/ddev
+brew trust ddev/ddev
+{{ end }}
+
 brew bundle --file=/dev/stdin <<EOF
 
 # --- all macs ---
@@ -11,6 +16,9 @@ brew "neovim"
 
 # --- joehcooper-main ---
 {{ if eq .host "joehcooper-main" }}
+cask "orbstack"
+tap "ddev/ddev"
+brew "ddev/ddev/ddev"
 
 # --- joehcooper-roam ---
 {{ else if eq .host "joehcooper-roam" }}
