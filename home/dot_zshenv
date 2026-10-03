@@ -10,3 +10,6 @@ export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
 
 # Add user local bin to PATH
 export PATH="$HOME/.local/bin:$PATH"
+
+# Configure DDEV to use XDG.
+export DDEV_XDG_CONFIG_HOME="$HOME/.config"
