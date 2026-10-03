@@ -1,0 +1,256 @@
+#!/bin/bash
+# sstunnels - manages shadowsocks tunnels via tmux
+# Usage: sstunnels [start|stop|restart|status|attach] [tunnel_name]
+
+set -euo pipefail
+
+SESSION_NAME="ss-tunnels"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/sstunnels"
+PROFILES_DIR="$CONFIG_DIR/profiles"
+TUNNELS=()
+
+# Dynamically populate TUNNELS array from the profiles directory
+if [[ -d "$PROFILES_DIR" ]]; then
+    for config in "$PROFILES_DIR"/*.json; do
+        # Handle case where directory is empty (glob returns the literal string)
+        [[ -e "$config" ]] || continue
+        name=$(basename "$config" .json)
+        TUNNELS+=("$name:$config")
+    done
+fi
+
+# Get a comma-separated list of available tunnels for error messages
+get_available_tunnels_string() {
+    if [[ ${#TUNNELS[@]} -eq 0 ]]; then
+        echo "none (add .json files to $PROFILES_DIR)"
+        return
+    fi
+    printf "%s\n" "${TUNNELS[@]}" | cut -d: -f1 | tr '\n' ', ' | sed 's/, $//'
+}
+
+is_tunnel_running() {
+    local name="$1"
+    tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' 2>/dev/null | grep -qx "$name"
+}
+
+start_tunnel() {
+    local name="$1"
+    local config="$2"
+
+    if is_tunnel_running "$name"; then
+        echo "[$name] already running"
+        return 0
+    fi
+
+    # Create session if needed
+    if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        tmux new-session -d -s "$SESSION_NAME" -n "$name"
+        tmux set-option -t "$SESSION_NAME" remain-on-exit on
+    fi
+
+    # Create window for this tunnel if it doesn't exist
+    if ! is_tunnel_running "$name"; then
+        tmux new-window -t "$SESSION_NAME" -n "$name"
+    fi
+
+    echo "Starting [$name]..."
+    tmux send-keys -t "$SESSION_NAME:$name" "sslocal -c \"$config\"" Enter
+    echo "[$name] started"
+}
+
+stop_tunnel() {
+    local name="$1"
+
+    if ! is_tunnel_running "$name"; then
+        echo "[$name] not running"
+        return 0
+    fi
+
+    echo "Stopping [$name]..."
+    # Send Ctrl-C
+    tmux send-keys -t "$SESSION_NAME:$name" C-c 2>/dev/null || true
+
+    # Wait and SIGKILL if still alive
+    sleep 1
+    tmux kill-window -t "$SESSION_NAME:$name" 2>/dev/null || true
+    echo "[$name] stopped"
+}
+
+show_brief_status() {
+    for entry in "${TUNNELS[@]:-}"; do
+        IFS=':' read -r name config <<< "$entry"
+        if is_tunnel_running "$name"; then
+            echo "$name:running"
+        else
+            echo "$name:stopped"
+        fi
+    done
+}
+
+show_status() {
+    echo "=== Shadowsocks Tunnels ==="
+    if [[ ${#TUNNELS[@]} -eq 0 ]]; then
+        echo "  No profiles found in $PROFILES_DIR"
+    else
+        for entry in "${TUNNELS[@]}"; do
+            IFS=':' read -r name config <<< "$entry"
+            if is_tunnel_running "$name"; then
+                echo "  [$name] running"
+            else
+                echo "  [$name] stopped"
+            fi
+        done
+    fi
+
+    if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        echo ""
+        echo "Tmux session: $SESSION_NAME"
+        echo "  Windows: $(tmux list-windows -t "$SESSION_NAME" -F '#{window_name}' | tr '\n' ', ' | sed 's/,$//')"
+    else
+        echo ""
+        echo "Tmux session: none"
+    fi
+}
+
+usage() {
+    local cmd_name=$(basename "$0")
+    cat <<EOF
+sstunnels - manages shadowsocks tunnels via tmux
+
+Usage: $cmd_name <command> [tunnel]
+
+Commands:
+  start [tunnel]   Start tunnel(s)
+  stop [tunnel]    Stop tunnel(s)
+  restart [tunnel] Restart tunnel(s)
+  status           Show tunnel status
+  status --brief   Machine-readable status (name:running|stopped per line)
+  attach           Attach to tmux session
+
+Available Tunnels (read from $PROFILES_DIR):
+EOF
+
+    if [[ ${#TUNNELS[@]} -gt 0 ]]; then
+        for entry in "${TUNNELS[@]}"; do
+            echo "  ${entry%%:*}"
+        done
+    else
+        echo "  (No profiles found)"
+    fi
+
+    cat <<EOF
+
+Examples:
+  $cmd_name start             # start all tunnels
+  $cmd_name start mytunnel    # start only 'mytunnel'
+  $cmd_name stop              # stop all tunnels
+  $cmd_name status            # show status
+  $cmd_name attach            # attach to tmux session
+EOF
+}
+
+main() {
+    local command="${1:-}"
+    local target="${2:-}"
+
+    case "$command" in
+        start)
+            if [[ -z "$target" ]]; then
+                for entry in "${TUNNELS[@]:-}"; do
+                    IFS=':' read -r name config <<< "$entry"
+                    start_tunnel "$name" "$config"
+                done
+            else
+                local found=0
+                for entry in "${TUNNELS[@]:-}"; do
+                    IFS=':' read -r name config <<< "$entry"
+                    if [[ "$name" == "$target" ]]; then
+                        start_tunnel "$name" "$config"
+                        found=1
+                        break
+                    fi
+                done
+                if [[ $found -eq 0 ]]; then
+                    echo "Error: Unknown tunnel '$target'"
+                    echo "Available tunnels: $(get_available_tunnels_string)"
+                    exit 1
+                fi
+            fi
+            ;;
+        stop)
+            if [[ -z "$target" ]]; then
+                for entry in "${TUNNELS[@]:-}"; do
+                    IFS=':' read -r name config <<< "$entry"
+                    stop_tunnel "$name"
+                done
+                # Kill session if no tunnels running
+                local any_running=0
+                for entry in "${TUNNELS[@]:-}"; do
+                    IFS=':' read -r name config <<< "$entry"
+                    if is_tunnel_running "$name"; then
+                        any_running=1
+                        break
+                    fi
+                done
+                if [[ $any_running -eq 0 ]] && tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+                    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+                    echo "Tmux session '$SESSION_NAME' closed (all tunnels stopped)"
+                fi
+            else
+                local found=0
+                for entry in "${TUNNELS[@]:-}"; do
+                    IFS=':' read -r name config <<< "$entry"
+                    if [[ "$name" == "$target" ]]; then
+                        stop_tunnel "$name"
+                        found=1
+                        break
+                    fi
+                done
+                if [[ $found -eq 0 ]]; then
+                    echo "Error: Unknown tunnel '$target'"
+                    echo "Available tunnels: $(get_available_tunnels_string)"
+                    exit 1
+                fi
+            fi
+            ;;
+        restart)
+            if [[ -z "$target" ]]; then
+                "$0" stop
+                "$0" start
+            else
+                "$0" stop "$target"
+                "$0" start "$target"
+            fi
+            ;;
+        status)
+            if [[ "${2:-}" == "--brief" ]]; then
+                show_brief_status
+            else
+                show_status
+            fi
+            ;;
+        attach)
+            if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+                tmux attach-session -t "$SESSION_NAME"
+            else
+                echo "Session '$SESSION_NAME' not found. Start tunnels first with: $0 start"
+                exit 1
+            fi
+            ;;
+        help|--help|-h)
+            usage
+            ;;
+        "")
+            usage
+            exit 1
+            ;;
+        *)
+            echo "Error: Unknown command '$command'"
+            echo ""
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
