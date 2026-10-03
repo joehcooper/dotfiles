@@ -7,3 +7,6 @@ export XDG_STATE_HOME="$HOME/.local/state"
 
 # Redirect Zsh to look for .zshrc, .zprofile, etc., inside the XDG config directory
 export ZDOTDIR="$XDG_CONFIG_HOME/zsh"
+
+# Add user local bin to PATH
+export PATH="$HOME/.local/bin:$PATH"
